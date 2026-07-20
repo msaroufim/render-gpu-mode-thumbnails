@@ -34,7 +34,11 @@ Create thumbnails with the bundled deterministic renderer. Preserve the white ba
 
 ## Process the intake queue
 
-Run `scripts/process_intake_job.py --max-jobs 3` with `GOOGLE_APPS_SCRIPT_URL` and `GOOGLE_APPS_SCRIPT_TOKEN` set. In production, let Apps Script dispatch the GitHub workflow immediately and retain the five-minute schedule as a fallback. Never print the bridge token, GitHub trigger token, image payloads, or private submission contents.
+When the organizer says a speaker has submitted, run `scripts/dispatch_intake_queue.sh`. It dispatches the private GitHub Actions worker, waits for completion, and prints the run URL plus a completion line. This is the preferred organizer-assisted workflow because it uses the existing authenticated GitHub CLI session and requires no GitHub token in Apps Script.
+
+Use `scripts/dispatch_intake_queue.sh --no-wait` only when the user does not want Codex to monitor the result. Use `--job-id ID` when a submission job ID is already known; otherwise the worker safely drains up to three queued submissions. Confirm that the workflow completed a thumbnail job, then direct the organizer to the private Generated Thumbnails Drive folder.
+
+The five-minute GitHub schedule remains a fallback. Apps Script's GitHub dispatch is optional and activates only when `GITHUB_TRIGGER_TOKEN` is configured. Never print the bridge token, GitHub trigger token, image payloads, or private submission contents.
 
 ## Rules
 

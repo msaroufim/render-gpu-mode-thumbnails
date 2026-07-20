@@ -1,6 +1,6 @@
 # Speaker intake automation
 
-Use this integration when speakers should receive one link and the organizer should not move files, rename uploads, or trigger renders manually.
+Use this integration when speakers should receive one link and the organizer should not move files or rename uploads. The organizer can ask Codex to process the queue immediately, or rely on the scheduled fallback.
 
 ## Architecture
 
@@ -11,9 +11,21 @@ Use this integration when speakers should receive one link and the organizer sho
    - a private generated-thumbnail folder;
    - a random bridge token in Script Properties.
 3. Share only the web app `/exec` URL with speakers. Do not share the Drive folder or spreadsheet.
-4. Let the Apps Script dispatch the queue workflow immediately after a successful submission.
-5. Keep `.github/workflows/process-speaker-intake.yml` polling every five minutes as a fallback if the immediate dispatch fails.
+4. After a submission, let the thumbnail skill dispatch the queue workflow from an authenticated GitHub CLI session.
+5. Keep `.github/workflows/process-speaker-intake.yml` polling every five minutes as a fallback.
 6. Let the worker return exact 1280x720 PNGs through the token-protected bridge. The Apps Script saves them to the private output folder and writes the Drive link to the submission row.
+
+## Queue a submission manually
+
+From an authenticated organizer machine, run:
+
+```bash
+scripts/dispatch_intake_queue.sh
+```
+
+The helper prints the GitHub Actions URL, waits for the run, and reports whether it completed a thumbnail job or found an empty queue. It processes up to three queued submissions per run. This is the recommended path when the organizer is already working with Codex: no additional GitHub credential is stored in Apps Script, and a typical warm run finishes in tens of seconds.
+
+Tell Codex “process the speaker intake queue” after someone submits. The skill should dispatch the helper, monitor it, and direct the organizer to the private Generated Thumbnails folder.
 
 ## Deploy the Google web app
 
@@ -27,7 +39,7 @@ Use this integration when speakers should receive one link and the organizer sho
    - use the resulting `/exec` URL as both the public intake URL and the bridge URL.
 6. Run `logBridgeConfiguration` and read its execution log. Treat the printed bridge token as a secret.
 
-## Configure the immediate trigger
+## Optional: configure automatic immediate triggering
 
 1. Create a fine-grained GitHub personal access token restricted to `msaroufim/render-gpu-mode-thumbnails`.
 2. Grant only **Actions: Read and write**, which GitHub requires for the workflow-dispatch endpoint.
@@ -38,7 +50,7 @@ Use this integration when speakers should receive one link and the organizer sho
    - `GITHUB_REF=main`
 5. Redeploy the web app after changing Apps Script source. Never place the GitHub token in GitHub, source files, logs, URLs, or the public HTML page.
 
-The immediate trigger is best-effort. A failed GitHub request does not reject the speaker's submission; the row remains `QUEUED` for the five-minute scheduled fallback.
+This token is not required for the manual skill workflow. The automatic trigger is best-effort: a failed GitHub request does not reject the speaker's submission, and the row remains `QUEUED` for the manual skill or five-minute scheduled fallback.
 
 ## Configure GitHub
 
