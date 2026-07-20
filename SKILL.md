@@ -34,7 +34,7 @@ Create thumbnails with the bundled deterministic renderer. Preserve the white ba
 
 ## Process the intake queue
 
-Run `scripts/process_intake_job.py --max-jobs 3` with `GOOGLE_APPS_SCRIPT_URL` and `GOOGLE_APPS_SCRIPT_TOKEN` set. Let the scheduled GitHub workflow handle this in production. Never print the bridge token, image payloads, or private submission contents.
+Run `scripts/process_intake_job.py --max-jobs 3` with `GOOGLE_APPS_SCRIPT_URL` and `GOOGLE_APPS_SCRIPT_TOKEN` set. In production, let Apps Script dispatch the GitHub workflow immediately and retain the five-minute schedule as a fallback. Never print the bridge token, GitHub trigger token, image payloads, or private submission contents.
 
 ## Rules
 

@@ -2,6 +2,11 @@ name: Process speaker intake thumbnail queue
 
 on:
   workflow_dispatch:
+    inputs:
+      job_id:
+        description: Submission job ID that requested this run
+        required: false
+        type: string
   schedule:
     - cron: "*/5 * * * *"
 

@@ -2,6 +2,9 @@ const INTAKE = Object.freeze({
   sheetName: "Submissions",
   leaseMinutes: 20,
   maxImageBytes: 5 * 1024 * 1024,
+  githubRepository: "msaroufim/render-gpu-mode-thumbnails",
+  githubWorkflow: "process-speaker-intake.yml",
+  githubRef: "main",
   headers: Object.freeze([
     "Submitted at",
     "Contact email",
@@ -67,6 +70,9 @@ function setupAutomation() {
     INBOX_FOLDER_ID: inboxFolderId,
     OUTPUT_FOLDER_ID: outputFolderId,
     BRIDGE_TOKEN: token,
+    GITHUB_REPOSITORY: properties.getProperty("GITHUB_REPOSITORY") || INTAKE.githubRepository,
+    GITHUB_WORKFLOW: properties.getProperty("GITHUB_WORKFLOW") || INTAKE.githubWorkflow,
+    GITHUB_REF: properties.getProperty("GITHUB_REF") || INTAKE.githubRef,
   });
   console.log("GPU MODE intake resources are ready. Run logBridgeConfiguration after deployment.");
 }
@@ -83,6 +89,7 @@ function logBridgeConfiguration() {
     spreadsheet_url: properties.getProperty("SPREADSHEET_ID")
       ? "https://docs.google.com/spreadsheets/d/" + properties.getProperty("SPREADSHEET_ID") + "/edit"
       : "Run setupAutomation first",
+    github_trigger_configured: Boolean(properties.getProperty("GITHUB_TRIGGER_TOKEN")),
   };
   console.log(JSON.stringify(configuration));
 }
@@ -136,6 +143,7 @@ function submitTalk(payload) {
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
   const createdFiles = [];
+  let submissionId = "";
   try {
     const resources = configuredResources_();
     const inbox = DriveApp.getFolderById(resources.inboxFolderId);
@@ -175,7 +183,8 @@ function submitTalk(payload) {
       "",
     ]);
     sheet.appendRow(row);
-    return {status: "ok", submission_id: jobId};
+    SpreadsheetApp.flush();
+    submissionId = jobId;
   } catch (error) {
     createdFiles.forEach(function (file) {
       try {
@@ -188,6 +197,59 @@ function submitTalk(payload) {
   } finally {
     lock.releaseLock();
   }
+
+  let processingStarted = false;
+  try {
+    processingStarted = triggerGitHubWorker_(submissionId);
+  } catch (error) {
+    console.error("Immediate GitHub trigger failed; scheduled polling will retry. " + safeError_(error));
+  }
+  return {
+    status: "ok",
+    submission_id: submissionId,
+    processing_started: processingStarted,
+  };
+}
+
+
+function triggerGitHubWorker_(jobId) {
+  const properties = PropertiesService.getScriptProperties();
+  const token = properties.getProperty("GITHUB_TRIGGER_TOKEN");
+  if (!token) {
+    console.warn("Immediate GitHub trigger is not configured; scheduled polling will process " + jobId + ".");
+    return false;
+  }
+  const repository = properties.getProperty("GITHUB_REPOSITORY") || INTAKE.githubRepository;
+  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)) {
+    throw new Error("GITHUB_REPOSITORY must use owner/repository format.");
+  }
+  const workflow = properties.getProperty("GITHUB_WORKFLOW") || INTAKE.githubWorkflow;
+  const ref = properties.getProperty("GITHUB_REF") || INTAKE.githubRef;
+  const response = UrlFetchApp.fetch(
+    "https://api.github.com/repos/" + repository + "/actions/workflows/" +
+      encodeURIComponent(workflow) + "/dispatches",
+    {
+      method: "post",
+      contentType: "application/json",
+      headers: {
+        Accept: "application/vnd.github+json",
+        Authorization: "Bearer " + token,
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+      payload: JSON.stringify({
+        ref: ref,
+        inputs: {job_id: jobId},
+      }),
+      muteHttpExceptions: true,
+    }
+  );
+  if (response.getResponseCode() !== 204) {
+    throw new Error(
+      "GitHub workflow dispatch returned HTTP " + response.getResponseCode() + ": " +
+      response.getContentText().slice(0, 500)
+    );
+  }
+  return true;
 }
 
 

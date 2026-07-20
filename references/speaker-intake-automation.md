@@ -11,8 +11,9 @@ Use this integration when speakers should receive one link and the organizer sho
    - a private generated-thumbnail folder;
    - a random bridge token in Script Properties.
 3. Share only the web app `/exec` URL with speakers. Do not share the Drive folder or spreadsheet.
-4. Let `.github/workflows/process-speaker-intake.yml` poll the private queue every five minutes.
-5. Let the worker return exact 1280x720 PNGs through the token-protected bridge. The Apps Script saves them to the private output folder and writes the Drive link to the submission row.
+4. Let the Apps Script dispatch the queue workflow immediately after a successful submission.
+5. Keep `.github/workflows/process-speaker-intake.yml` polling every five minutes as a fallback if the immediate dispatch fails.
+6. Let the worker return exact 1280x720 PNGs through the token-protected bridge. The Apps Script saves them to the private output folder and writes the Drive link to the submission row.
 
 ## Deploy the Google web app
 
@@ -26,6 +27,19 @@ Use this integration when speakers should receive one link and the organizer sho
    - use the resulting `/exec` URL as both the public intake URL and the bridge URL.
 6. Run `logBridgeConfiguration` and read its execution log. Treat the printed bridge token as a secret.
 
+## Configure the immediate trigger
+
+1. Create a fine-grained GitHub personal access token restricted to `msaroufim/render-gpu-mode-thumbnails`.
+2. Grant only **Actions: Read and write**, which GitHub requires for the workflow-dispatch endpoint.
+3. In Apps Script **Project Settings → Script Properties**, create `GITHUB_TRIGGER_TOKEN` with that token as its value.
+4. Run `setupAutomation` again so these non-secret properties are present:
+   - `GITHUB_REPOSITORY=msaroufim/render-gpu-mode-thumbnails`
+   - `GITHUB_WORKFLOW=process-speaker-intake.yml`
+   - `GITHUB_REF=main`
+5. Redeploy the web app after changing Apps Script source. Never place the GitHub token in GitHub, source files, logs, URLs, or the public HTML page.
+
+The immediate trigger is best-effort. A failed GitHub request does not reject the speaker's submission; the row remains `QUEUED` for the five-minute scheduled fallback.
+
 ## Configure GitHub
 
 Create these repository Actions secrets:
@@ -34,6 +48,8 @@ Create these repository Actions secrets:
 - `GOOGLE_APPS_SCRIPT_TOKEN`: the bridge token logged by Apps Script.
 
 Run the **Process speaker intake thumbnail queue** workflow manually once. A healthy empty queue prints `No queued thumbnail submissions`.
+
+The workflow file must be merged into the default branch before GitHub will accept API workflow-dispatch runs.
 
 ## Intake and privacy rules
 
