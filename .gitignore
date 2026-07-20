@@ -3,3 +3,5 @@ __pycache__/
 outputs/
 requests/
 .DS_Store
+.clasp.json
+.clasprc.json

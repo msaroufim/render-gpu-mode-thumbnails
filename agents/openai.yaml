@@ -1,4 +1,4 @@
 interface:
   display_name: "GPU MODE YouTube Thumbnails"
-  short_description: "Render branded 1280×720 speaker thumbnails"
-  default_prompt: "Use $render-gpu-mode-thumbnails to make a GPU MODE YouTube thumbnail from a title, speaker names, and headshots."
+  short_description: "Render thumbnails or process speaker intake"
+  default_prompt: "Use $render-gpu-mode-thumbnails to create a GPU MODE thumbnail or process the private speaker-intake queue."
