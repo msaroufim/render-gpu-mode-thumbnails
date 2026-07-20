@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <base target="_top">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+      :root { color-scheme: light; font-family: Arial, Helvetica, sans-serif; }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: #f4f2ec; color: #11110f; }
+      main { width: min(760px, calc(100% - 32px)); margin: 40px auto; }
+      .brand { display: inline-grid; grid-template-columns: repeat(3, auto); gap: 2px 7px; font-weight: 900; font-size: 18px; line-height: .85; letter-spacing: -.06em; }
+      .brand span:nth-child(4) { grid-column: 1; }
+      .brand-dot { width: 12px; height: 12px; border-radius: 50%; background: #11110f; align-self: center; justify-self: center; }
+      h1 { font-size: clamp(38px, 7vw, 68px); line-height: .96; letter-spacing: -.055em; margin: 28px 0 14px; }
+      .lede { max-width: 620px; font-size: 18px; line-height: 1.45; color: #55534d; margin-bottom: 30px; }
+      form { background: #fff; border: 1px solid #d8d5cc; padding: clamp(22px, 5vw, 42px); box-shadow: 0 16px 50px rgba(34, 31, 24, .08); }
+      label, legend { display: block; font-weight: 700; margin-bottom: 8px; }
+      .field { margin-bottom: 24px; }
+      input, textarea { width: 100%; border: 1px solid #a9a69d; border-radius: 0; padding: 13px 14px; font: inherit; background: #fff; }
+      input:focus, textarea:focus { outline: 3px solid #d9ef6f; outline-offset: 1px; border-color: #11110f; }
+      textarea { min-height: 150px; resize: vertical; }
+      .speaker { border: 1px solid #d8d5cc; padding: 20px; margin: 0 0 18px; }
+      .speaker-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+      .speaker-head h2 { font-size: 20px; margin: 0; }
+      .hint { font-size: 14px; line-height: 1.4; color: #66635b; margin-top: 7px; }
+      .actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+      button { border: 1px solid #11110f; background: #11110f; color: #fff; padding: 13px 18px; font: inherit; font-weight: 700; cursor: pointer; }
+      button.secondary { background: #fff; color: #11110f; }
+      button.remove { background: transparent; color: #7b241c; border-color: #b88d88; padding: 7px 10px; }
+      button:disabled { opacity: .55; cursor: wait; }
+      .consent { display: grid; grid-template-columns: 22px 1fr; gap: 10px; align-items: start; font-weight: 400; line-height: 1.4; }
+      .consent input { width: 18px; height: 18px; margin: 2px 0 0; }
+      .honeypot { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+      #status { margin-top: 18px; min-height: 24px; font-weight: 700; }
+      #status.success { color: #14622d; }
+      #status.error { color: #9a281e; }
+      @media (max-width: 560px) { main { margin: 24px auto; } form { padding: 22px; } }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="brand" aria-label="GPU MODE">
+        <span>G</span><span>P</span><span>U</span><span>M</span><span class="brand-dot"></span><span>DE</span>
+      </div>
+      <h1>Submit your GPU MODE talk</h1>
+      <p class="lede">One form, one upload, done. We’ll use these details to prepare the talk listing and an exact 1280×720 YouTube thumbnail.</p>
+
+      <form id="intake-form">
+        <div class="honeypot" aria-hidden="true">
+          <label>Company website <input id="company-website" autocomplete="off" tabindex="-1"></label>
+        </div>
+        <div class="field">
+          <label for="contact-email">Contact email</label>
+          <input id="contact-email" type="email" autocomplete="email" required>
+        </div>
+        <div class="field">
+          <label for="talk-title">Talk title</label>
+          <input id="talk-title" maxlength="180" required>
+        </div>
+        <div class="field">
+          <label for="abstract">Abstract</label>
+          <textarea id="abstract" maxlength="5000" required></textarea>
+        </div>
+        <div class="field">
+          <label for="subtitle">Thumbnail subtitle or URL <span class="hint">(optional)</span></label>
+          <input id="subtitle" maxlength="160" placeholder="example.com/event">
+        </div>
+
+        <div id="speakers"></div>
+        <div class="actions field">
+          <button type="button" id="add-speaker" class="secondary">Add co-speaker</button>
+        </div>
+
+        <div class="field">
+          <label class="consent">
+            <input id="consent" type="checkbox" required>
+            <span>I confirm that GPU MODE may use the submitted names, talk information, and profile pictures in public event materials and thumbnails.</span>
+          </label>
+          <p class="hint">Your submission and image files are stored in GPU MODE’s private Google Drive. Other speakers cannot view them.</p>
+        </div>
+        <button id="submit-button" type="submit">Submit talk</button>
+        <div id="status" role="status" aria-live="polite"></div>
+      </form>
+    </main>
+
+    <template id="speaker-template">
+      <section class="speaker">
+        <div class="speaker-head">
+          <h2></h2>
+          <button type="button" class="remove">Remove</button>
+        </div>
+        <div class="field">
+          <label>Speaker name</label>
+          <input class="speaker-name" maxlength="120" required>
+        </div>
+        <div class="field">
+          <label>Profile picture</label>
+          <input class="speaker-photo" type="file" accept="image/jpeg,image/png,image/webp" required>
+          <p class="hint">JPEG, PNG, or WebP. Large photos are resized in your browser before upload.</p>
+        </div>
+      </section>
+    </template>
+
+    <script>
+      const MAX_SPEAKERS = 3;
+      const MAX_SOURCE_BYTES = 15 * 1024 * 1024;
+      const speakersContainer = document.getElementById("speakers");
+      const addButton = document.getElementById("add-speaker");
+      const form = document.getElementById("intake-form");
+      const submitButton = document.getElementById("submit-button");
+      const statusElement = document.getElementById("status");
+
+      function addSpeaker() {
+        if (speakersContainer.children.length >= MAX_SPEAKERS) return;
+        const fragment = document.getElementById("speaker-template").content.cloneNode(true);
+        const section = fragment.querySelector(".speaker");
+        const remove = fragment.querySelector(".remove");
+        speakersContainer.appendChild(fragment);
+        section.querySelector("h2").textContent = speakersContainer.children.length === 1
+          ? "Speaker"
+          : `Co-speaker ${speakersContainer.children.length - 1}`;
+        remove.hidden = speakersContainer.children.length === 1;
+        remove.addEventListener("click", () => {
+          section.remove();
+          renumberSpeakers();
+        });
+        addButton.disabled = speakersContainer.children.length >= MAX_SPEAKERS;
+      }
+
+      function renumberSpeakers() {
+        [...speakersContainer.children].forEach((section, index) => {
+          section.querySelector("h2").textContent = index === 0 ? "Speaker" : `Co-speaker ${index}`;
+          section.querySelector(".remove").hidden = index === 0;
+        });
+        addButton.disabled = speakersContainer.children.length >= MAX_SPEAKERS;
+      }
+
+      function fileToResizedJpeg(file) {
+        if (!file || file.size > MAX_SOURCE_BYTES) {
+          return Promise.reject(new Error("Each profile picture must be smaller than 15 MB."));
+        }
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onerror = () => reject(new Error("Could not read a profile picture."));
+          reader.onload = () => {
+            const image = new Image();
+            image.onerror = () => reject(new Error("A selected file is not a readable image."));
+            image.onload = () => {
+              const maxDimension = 1600;
+              const scale = Math.min(1, maxDimension / Math.max(image.naturalWidth, image.naturalHeight));
+              const width = Math.max(1, Math.round(image.naturalWidth * scale));
+              const height = Math.max(1, Math.round(image.naturalHeight * scale));
+              const canvas = document.createElement("canvas");
+              canvas.width = width;
+              canvas.height = height;
+              const context = canvas.getContext("2d");
+              context.fillStyle = "#ffffff";
+              context.fillRect(0, 0, width, height);
+              context.drawImage(image, 0, 0, width, height);
+              const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
+              resolve({
+                filename: file.name.replace(/\.[^.]+$/, "") + ".jpg",
+                mime_type: "image/jpeg",
+                photo_base64: dataUrl.split(",")[1],
+              });
+            };
+            image.src = reader.result;
+          };
+          reader.readAsDataURL(file);
+        });
+      }
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        statusElement.className = "";
+        statusElement.textContent = "Preparing your submission…";
+        submitButton.disabled = true;
+        addButton.disabled = true;
+        try {
+          const speakers = [];
+          for (const section of speakersContainer.children) {
+            const name = section.querySelector(".speaker-name").value.trim();
+            const file = section.querySelector(".speaker-photo").files[0];
+            const photo = await fileToResizedJpeg(file);
+            speakers.push({name, ...photo});
+          }
+          const payload = {
+            contact_email: document.getElementById("contact-email").value.trim(),
+            title: document.getElementById("talk-title").value.trim(),
+            abstract: document.getElementById("abstract").value.trim(),
+            subtitle: document.getElementById("subtitle").value.trim(),
+            company_website: document.getElementById("company-website").value,
+            consent: document.getElementById("consent").checked,
+            speakers,
+          };
+          google.script.run
+            .withSuccessHandler((result) => {
+              form.reset();
+              while (speakersContainer.children.length > 1) speakersContainer.lastElementChild.remove();
+              renumberSpeakers();
+              statusElement.className = "success";
+              statusElement.textContent = `Submitted. Reference: ${result.submission_id}`;
+              submitButton.disabled = false;
+            })
+            .withFailureHandler((error) => {
+              statusElement.className = "error";
+              statusElement.textContent = error.message || "Submission failed. Please try again.";
+              submitButton.disabled = false;
+              addButton.disabled = speakersContainer.children.length >= MAX_SPEAKERS;
+            })
+            .submitTalk(payload);
+        } catch (error) {
+          statusElement.className = "error";
+          statusElement.textContent = error.message || "Submission failed. Please try again.";
+          submitButton.disabled = false;
+          addButton.disabled = speakersContainer.children.length >= MAX_SPEAKERS;
+        }
+      });
+
+      addButton.addEventListener("click", addSpeaker);
+      addSpeaker();
+    </script>
+  </body>
+</html>
