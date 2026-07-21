@@ -66,7 +66,8 @@ The workflow file must be merged into the default branch before GitHub will acce
 ## Intake and privacy rules
 
 - The public page accepts one required speaker and up to two optional co-speakers.
-- Resize images in the responder's browser to at most 1600 pixels on the long edge before upload.
+- Resize images in the responder's browser to at most 1200 pixels on the long edge before upload.
+- Reject unsupported photo formats promptly and restore the form after client preparation or upload timeouts.
 - Store source photos and generated thumbnails privately in Drive; never commit or upload them as GitHub artifacts.
 - Require public-use consent before accepting a submission.
 - Expose no read endpoint without the bridge token.

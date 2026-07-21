@@ -99,6 +99,16 @@
     <script>
       const MAX_SPEAKERS = 3;
       const MAX_SOURCE_BYTES = 15 * 1024 * 1024;
+      const MAX_OUTPUT_BYTES = 2 * 1024 * 1024;
+      const PHOTO_TIMEOUT_MS = 45000;
+      const SUBMISSION_TIMEOUT_MS = 90000;
+      const SUPPORTED_IMAGE_TYPES = new Set([
+        "image/jpeg",
+        "image/jpg",
+        "image/pjpeg",
+        "image/png",
+        "image/webp",
+      ]);
       const speakersContainer = document.getElementById("speakers");
       const addButton = document.getElementById("add-speaker");
       const form = document.getElementById("intake-form");
@@ -130,53 +140,166 @@
         addButton.disabled = speakersContainer.children.length >= MAX_SPEAKERS;
       }
 
-      function fileToResizedJpeg(file) {
-        if (!file || file.size > MAX_SOURCE_BYTES) {
-          return Promise.reject(new Error("Each profile picture must be smaller than 15 MB."));
+      function fileToResizedJpeg(file, speakerNumber) {
+        if (!file) {
+          return Promise.reject(new Error(`Choose a profile picture for speaker ${speakerNumber}.`));
         }
+        if (file.size > MAX_SOURCE_BYTES) {
+          return Promise.reject(new Error(`Speaker ${speakerNumber}'s picture must be smaller than 15 MB.`));
+        }
+        const mimeType = String(file.type || "").toLowerCase();
+        if (mimeType && !SUPPORTED_IMAGE_TYPES.has(mimeType)) {
+          return Promise.reject(new Error(
+            `Speaker ${speakerNumber}'s picture is ${mimeType}. Please use a JPEG, PNG, or WebP file.`
+          ));
+        }
+
         return new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onerror = () => reject(new Error("Could not read a profile picture."));
-          reader.onload = () => {
-            const image = new Image();
-            image.onerror = () => reject(new Error("A selected file is not a readable image."));
-            image.onload = () => {
-              const maxDimension = 1600;
-              const scale = Math.min(1, maxDimension / Math.max(image.naturalWidth, image.naturalHeight));
-              const width = Math.max(1, Math.round(image.naturalWidth * scale));
-              const height = Math.max(1, Math.round(image.naturalHeight * scale));
+          let settled = false;
+          let objectUrl = "";
+          const timeout = setTimeout(() => fail(new Error(
+            `Speaker ${speakerNumber}'s picture took too long to prepare. Try a smaller JPEG or PNG.`
+          )), PHOTO_TIMEOUT_MS);
+
+          function cleanup() {
+            clearTimeout(timeout);
+            if (objectUrl) URL.revokeObjectURL(objectUrl);
+          }
+
+          function succeed(value) {
+            if (settled) return;
+            settled = true;
+            cleanup();
+            resolve(value);
+          }
+
+          function fail(error) {
+            if (settled) return;
+            settled = true;
+            cleanup();
+            reject(error);
+          }
+
+          function encode(blob) {
+            if (!blob) {
+              fail(new Error(`Could not prepare speaker ${speakerNumber}'s picture.`));
+              return;
+            }
+            if (blob.size > MAX_OUTPUT_BYTES) {
+              fail(new Error(`Speaker ${speakerNumber}'s picture is still too large after resizing.`));
+              return;
+            }
+            const reader = new FileReader();
+            reader.onerror = () => fail(new Error(`Could not read speaker ${speakerNumber}'s picture.`));
+            reader.onload = () => {
+              const parts = String(reader.result || "").split(",");
+              if (parts.length < 2 || !parts[1]) {
+                fail(new Error(`Could not encode speaker ${speakerNumber}'s picture.`));
+                return;
+              }
+              const basename = file.name.replace(/\.[^.]+$/, "") || `speaker-${speakerNumber}`;
+              succeed({
+                filename: basename + ".jpg",
+                mime_type: "image/jpeg",
+                photo_base64: parts[1],
+              });
+            };
+            reader.readAsDataURL(blob);
+          }
+
+          const image = new Image();
+          image.onerror = () => fail(new Error(
+            `Speaker ${speakerNumber}'s picture could not be opened. Please use a JPEG, PNG, or WebP file.`
+          ));
+          image.onload = () => {
+            try {
+              const maxDimension = 1200;
+              const sourceWidth = image.naturalWidth || image.width;
+              const sourceHeight = image.naturalHeight || image.height;
+              if (!sourceWidth || !sourceHeight) {
+                throw new Error("The image has no readable dimensions.");
+              }
+              const scale = Math.min(1, maxDimension / Math.max(sourceWidth, sourceHeight));
+              const width = Math.max(1, Math.round(sourceWidth * scale));
+              const height = Math.max(1, Math.round(sourceHeight * scale));
               const canvas = document.createElement("canvas");
               canvas.width = width;
               canvas.height = height;
               const context = canvas.getContext("2d");
+              if (!context || typeof canvas.toBlob !== "function") {
+                throw new Error("This browser cannot resize the selected picture.");
+              }
               context.fillStyle = "#ffffff";
               context.fillRect(0, 0, width, height);
               context.drawImage(image, 0, 0, width, height);
-              const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
-              resolve({
-                filename: file.name.replace(/\.[^.]+$/, "") + ".jpg",
-                mime_type: "image/jpeg",
-                photo_base64: dataUrl.split(",")[1],
-              });
-            };
-            image.src = reader.result;
+              canvas.toBlob((blob) => {
+                if (blob && blob.size <= MAX_OUTPUT_BYTES) {
+                  encode(blob);
+                  return;
+                }
+                canvas.toBlob(encode, "image/jpeg", 0.68);
+              }, "image/jpeg", 0.82);
+            } catch (error) {
+              fail(new Error(`Could not prepare speaker ${speakerNumber}'s picture: ${error.message}`));
+            }
           };
-          reader.readAsDataURL(file);
+          try {
+            objectUrl = URL.createObjectURL(file);
+            image.src = objectUrl;
+          } catch (error) {
+            fail(new Error(`Could not open speaker ${speakerNumber}'s picture.`));
+          }
         });
+      }
+
+      function submitPayload(payload) {
+        return new Promise((resolve, reject) => {
+          let settled = false;
+          const timeout = setTimeout(() => {
+            if (settled) return;
+            settled = true;
+            reject(new Error("The upload timed out. Check your connection and try again; your form entries are still here."));
+          }, SUBMISSION_TIMEOUT_MS);
+
+          function finish(callback, value) {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeout);
+            callback(value);
+          }
+
+          google.script.run
+            .withSuccessHandler((result) => finish(resolve, result))
+            .withFailureHandler((error) => finish(
+              reject,
+              new Error(error && error.message ? error.message : "Submission failed. Please try again.")
+            ))
+            .submitTalk(payload);
+        });
+      }
+
+      function setBusy(isBusy) {
+        submitButton.disabled = isBusy;
+        submitButton.textContent = isBusy ? "Submitting…" : "Submit talk";
+        addButton.disabled = isBusy || speakersContainer.children.length >= MAX_SPEAKERS;
       }
 
       form.addEventListener("submit", async (event) => {
         event.preventDefault();
         statusElement.className = "";
-        statusElement.textContent = "Preparing your submission…";
-        submitButton.disabled = true;
-        addButton.disabled = true;
+        setBusy(true);
         try {
+          if (!navigator.onLine) {
+            throw new Error("You appear to be offline. Reconnect and try again.");
+          }
           const speakers = [];
-          for (const section of speakersContainer.children) {
+          const sections = [...speakersContainer.children];
+          for (let index = 0; index < sections.length; index += 1) {
+            statusElement.textContent = `Preparing photo ${index + 1} of ${sections.length}…`;
+            const section = sections[index];
             const name = section.querySelector(".speaker-name").value.trim();
             const file = section.querySelector(".speaker-photo").files[0];
-            const photo = await fileToResizedJpeg(file);
+            const photo = await fileToResizedJpeg(file, index + 1);
             speakers.push({name, ...photo});
           }
           const payload = {
@@ -188,27 +311,18 @@
             consent: document.getElementById("consent").checked,
             speakers,
           };
-          google.script.run
-            .withSuccessHandler((result) => {
-              form.reset();
-              while (speakersContainer.children.length > 1) speakersContainer.lastElementChild.remove();
-              renumberSpeakers();
-              statusElement.className = "success";
-              statusElement.textContent = `Submitted. Reference: ${result.submission_id}`;
-              submitButton.disabled = false;
-            })
-            .withFailureHandler((error) => {
-              statusElement.className = "error";
-              statusElement.textContent = error.message || "Submission failed. Please try again.";
-              submitButton.disabled = false;
-              addButton.disabled = speakersContainer.children.length >= MAX_SPEAKERS;
-            })
-            .submitTalk(payload);
+          statusElement.textContent = "Uploading submission…";
+          const result = await submitPayload(payload);
+          form.reset();
+          while (speakersContainer.children.length > 1) speakersContainer.lastElementChild.remove();
+          renumberSpeakers();
+          statusElement.className = "success";
+          statusElement.textContent = `Submitted. Reference: ${result.submission_id}`;
+          setBusy(false);
         } catch (error) {
           statusElement.className = "error";
           statusElement.textContent = error.message || "Submission failed. Please try again.";
-          submitButton.disabled = false;
-          addButton.disabled = speakersContainer.children.length >= MAX_SPEAKERS;
+          setBusy(false);
         }
       });
 
