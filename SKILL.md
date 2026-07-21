@@ -11,6 +11,7 @@ Create thumbnails with the bundled deterministic renderer. Preserve the white ba
 
 - For one local thumbnail, use `scripts/render_thumbnail.py` with an explicit JSON request.
 - For hands-off speaker submissions, use `scripts/process_intake_job.py` with the Google-hosted intake bridge. Read [references/speaker-intake-automation.md](references/speaker-intake-automation.md) before deploying or changing that integration.
+- For StreamYard scheduling from the public GPU MODE events list, install or invoke the companion skill in `skills/schedule-gpu-mode-streamyard/`.
 
 ## Render one thumbnail
 
