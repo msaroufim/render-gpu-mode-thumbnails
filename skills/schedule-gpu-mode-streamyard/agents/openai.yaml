@@ -1,0 +1,4 @@
+interface:
+  display_name: "GPU MODE StreamYard Scheduler"
+  short_description: "Schedule broadcasts with the right thumbnails"
+  default_prompt: "Use $schedule-gpu-mode-streamyard to create missing StreamYard broadcasts from upcoming GPU MODE events and attach matching thumbnails."
