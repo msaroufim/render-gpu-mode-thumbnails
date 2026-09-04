@@ -1,0 +1,4 @@
+interface:
+  display_name: "Finalize GPU MODE YouTube Video"
+  short_description: "Turn a completed livestream into a saved video"
+  default_prompt: "Use $finalize-gpu-mode-youtube-video to convert the completed GPU MODE livestream into a normal YouTube video and restore its thumbnail."
